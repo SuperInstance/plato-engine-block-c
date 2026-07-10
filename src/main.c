@@ -60,12 +60,12 @@ int main(int argc, char **argv) {
                 if (!fgets(line, sizeof(line), stdin)) break;
                 line[strcspn(line, "\r\n")] = '\0';
                 if (strcmp(line, "quit") == 0) break;
-                int n = plato_handle_command(&eng, line, resp, sizeof(resp));
+                (void)plato_handle_command(&eng, line, resp, sizeof(resp));
                 printf("%s\n", resp);
                 fflush(stdout);
             } else if (ret == 0) {
                 /* timeout → auto tick */
-                int n = plato_handle_command(&eng, "tick", resp, sizeof(resp));
+                (void)plato_handle_command(&eng, "tick", resp, sizeof(resp));
                 printf("%s\n", resp);
                 fflush(stdout);
             }
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
             line[strcspn(line, "\r\n")] = '\0';
             if (strlen(line) == 0) continue;
             if (strcmp(line, "quit") == 0) break;
-            int n = plato_handle_command(&eng, line, resp, sizeof(resp));
+            (void)plato_handle_command(&eng, line, resp, sizeof(resp));
             printf("%s\n", resp);
             fflush(stdout);
         }

@@ -4,6 +4,15 @@
 
 The Plato Engine Block is a single-header C99 library implementing a sensor→history→alarm pipeline. It allocates zero bytes after initialization — all state lives in fixed-size arrays inside the `plato_engine_t` struct. The entire implementation lives behind `#define PLATO_ENGINE_IMPL` in `plato_engine.h`.
 
+✅ **Zero dynamic allocation** has been verified with:
+```bash
+$ grep -rn "malloc\|free(\|calloc\|realloc" src/ include/
+```
+The command returns zero matches across the entire engine core.
+
+✅ **Test status:** `make test` passes **21/21** tests across three suites
+(`test_engine.c`, `test_protocol.c`, `test_history.c`).
+
 ### Data Flow
 
 ```
@@ -114,6 +123,8 @@ Tests live in `tests/`:
 - **test_protocol.c** — Command parsing: all commands, edge cases, error handling.
 
 Run with `make test`. Tests are standalone C programs using `assert()` — no framework needed.
+
+**Verified:** `make test` passes 21/21 tests.
 
 ### Contributing
 

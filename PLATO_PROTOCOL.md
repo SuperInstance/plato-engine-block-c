@@ -48,11 +48,22 @@ If any alarms fire, additional lines follow:
 ! ALARM <name> [<severity>] <operator> <threshold>
 ```
 
+If a VETO‑severity alarm fires, the response also contains:
+```
+⛔ VETO ACTIVE — overridden by '<alarm_name>'
+```
+
+If any symmetry pairs are configured, each is reported as:
+```
+  sym '<name>': r=<correlation> ✓/✗
+```
+
 **Example:**
 ```
 > tick
 tick 1: cpu_temp=82.34 random=47.81 constant=42.00
 ! ALARM overheat [CRIT] > 80.00
+  sym 'rack-pair': r=0.82 ✓
 ```
 
 ### `history [N]`
@@ -102,6 +113,11 @@ ok <actuator_name>=<value>
 err unknown actuator '<name>'
 ```
 
+**Response (blocked by veto):**
+```
+⛔ VETO BLOCKED — '<actuator>' overridden by '<source>'
+```
+
 **Example:**
 ```
 > fan_speed 75.5
@@ -109,6 +125,9 @@ ok fan_speed=75.50
 
 > nonexistent 5.0
 err unknown actuator 'nonexistent'
+
+> fan_speed 80.0
+⛔ VETO BLOCKED — 'fan' overridden by 'critical_overtemp'
 ```
 
 ### `alarm list`
@@ -126,6 +145,11 @@ alarms (<count>):
   [0] <name>  sensor=<sensor>  <operator> <threshold>  sev=<severity>  armed=<yes|no>
 ```
 
+For symmetry alarms the format is:
+```
+  [0] <name>  SYMM  sensors=<sensor1>/<sensor2>  thresh=0.75  sev=WARN  armed=yes
+```
+
 **Example:**
 ```
 > alarm list
@@ -133,6 +157,47 @@ alarms (3):
   [0] overheat  sensor=cpu_temp  > 80.00  sev=CRIT  armed=yes
   [1] chilly    sensor=cpu_temp  < 50.00  sev=WARN  armed=no
   [2] lucky     sensor=random    >= 90.00  sev=INFO  armed=yes
+```
+
+### `symmetry list`
+
+Show all symmetry pairs and their current cross‑correlation.
+
+**Request:**
+```
+symmetry list
+```
+
+**Response:**
+```
+symmetry pairs (<count>):
+  [<index>] <name>  <sensor1> ↔ <sensor2>  r=<correlation>  thresh=<threshold>  ✓/✗
+```
+
+**Example:**
+```
+> symmetry list
+symmetry pairs (1):
+  [0] sine-drift  sine ↔ drift  r=0.32  thresh=0.75  ✗
+```
+
+### `veto`
+
+Show current veto status.
+
+**Request:**
+```
+veto
+```
+
+**Response (veto active):**
+```
+⛔ VETO active — source: '<alarm_name>'
+```
+
+**Response (no veto):**
+```
+✅ No veto active
 ```
 
 ### `subscribe`
@@ -182,6 +247,8 @@ Plato Engine Block — commands:
   history [N]     — show last N readings (default 10)
   <actuator> <v>  — set actuator to value
   alarm list      — show all alarms
+  symmetry list   — show all symmetry pairs
+  veto            — show current veto state
   subscribe       — subscribe to tick broadcasts
   unsubscribe     — stop tick broadcasts
   help            — this message
@@ -242,6 +309,10 @@ err unknown command (try 'help')
 
 This prevents alarm spam while ensuring sustained conditions are reported.
 
+Alarms at the `VETO` severity level additionally block all actuator writes
+while they are firing (see the `veto` command and the actuator error response
+`⛔ VETO BLOCKED …`). The veto reset at the start of each tick.
+
 ## Comparison Operators
 
 | Operator | Meaning |
@@ -259,6 +330,7 @@ This prevents alarm spam while ensuring sustained conditions are reported.
 | `INFO` | Informational, no action needed |
 | `WARN` | Warning, investigate soon |
 | `CRIT` | Critical, immediate action required |
+| `VETO` | Safety constraint – overrides all actuator writes |
 
 ## Binary Representation
 

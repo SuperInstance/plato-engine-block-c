@@ -5,8 +5,11 @@ on:
   pull_request:
     branches: [ main, master ]
 jobs:
-  test:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "No CI configured — customize per project requirements"
+      - name: Build
+        run: make
+      - name: Test
+        run: make test

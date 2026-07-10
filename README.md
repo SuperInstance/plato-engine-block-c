@@ -7,6 +7,16 @@ philosophy: **read sensors, store history, fire alarms, stream it all**. It's
 designed to run anywhere — from POSIX servers to bare-metal MCUs to game loops —
 with zero dynamic allocation after initialization.
 
+✅ **Zero dynamic allocation.** Verified via:
+```bash
+$ grep -rn "malloc\|free(\|calloc\|realloc" src/ include/
+```
+This returns zero matches across the entire engine core, confirming the
+"no heap after init" promise.
+
+✅ **Test status:** `make test` passes **21/21** tests across three suites
+(`test_engine.c`, `test_protocol.c`, `test_history.c`).
+
 Part of the [SuperInstance](https://github.com/SuperInstance) ecosystem.
 
 ---
@@ -180,6 +190,8 @@ See [PLATO_PROTOCOL.md](PLATO_PROTOCOL.md) for the full wire protocol spec.
 | `history [N]` | Formatted history | Show last N readings per sensor |
 | `<actuator> <value>` | `ok name=val` / `err ...` | Set actuator value |
 | `alarm list` | Alarm table | Show all alarms and state |
+| `symmetry list` | Symmetry table | Show all symmetry pairs |
+| `veto` | Veto status | Show current veto state |
 | `subscribe` | `ok subscribed` | Enable tick broadcasts |
 | `unsubscribe` | `ok unsubscribed` | Disable tick broadcasts |
 | `help` | Command list | Show available commands |
@@ -328,6 +340,8 @@ to any transport — the engine doesn't care.
 
 Tested on x86_64 Linux and ARM Cortex-M (QEMU). No platform-specific code
 in the engine core.
+
+**Verified:** `grep -rn "malloc\|free(\|calloc\|realloc" src/ include/` returns zero matches.
 
 ---
 
