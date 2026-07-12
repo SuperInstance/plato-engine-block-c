@@ -659,7 +659,7 @@ int plato_handle_command(plato_engine_t *eng, const char *cmd,
 
     /* ---- history [N] ---- */
     if (strncmp(c, "history", 7) == 0 &&
-        (cmd[7] == '\0' || cmd[7] == ' ' || cmd[7] == '\n')) {
+        (c[7] == '\0' || c[7] == ' ' || c[7] == '\n')) {
         int n = 0;
         const char *arg = trim(c + 7);
         int count = 10; /* default */
