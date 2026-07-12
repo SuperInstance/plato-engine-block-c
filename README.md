@@ -1,6 +1,7 @@
 # Plato Engine Block — C Reference Implementation
 
-> A tiny, embeddable sensor→history→alarm engine in under 400 lines of C99.
+> **Plato Engine Block — a sub-400-line room runtime for agent-space interaction.**  
+> A tiny, embeddable sensor→history→alarm engine in C99.
 
 The Plato Engine Block is the reference implementation of the Plato monitoring
 philosophy: **read sensors, store history, fire alarms, stream it all**. It's
@@ -64,6 +65,12 @@ make test
 # Auto-tick daemon (ticks every 1000ms, reads commands on stdin)
 ./plato_engine -a 1000
 
+# Auto-tick at custom rate (e.g. 100ms = 10 Hz)
+./plato_engine -a 100
+
+# TCP server auto-ticks every 2000ms (TICK_INTERVAL in server.c)
+./plato_server
+
 # Multi-client TCP server
 ./plato_server          # default port 7070
 ./plato_server 9090     # custom port
@@ -117,6 +124,14 @@ Include in one `.c` file with `#define PLATO_ENGINE_IMPL` for the implementation
 | `PLATO_MAX_HISTORY` | 256 | History buffer depth per sensor |
 | `PLATO_MAX_SUBSCRIBERS` | 32 | TCP subscriber limit |
 | `PLATO_ALARM_COOLDOWN` | 10 | Ticks before alarm re-arms |
+| `PLATO_LEMINAL_LOW` | 0.3 | Conviction below this → trit NEG (-1) |
+| `PLATO_LEMINAL_HIGH` | 0.7 | Conviction above this → trit POS (+1) |
+| `PLATO_SYMMETRY_WINDOW` | 16 | Sample window for symmetry cross-correlation |
+
+**Tick Rate:** The engine is tick-driven, not timer-driven. You control the
+rate by how often you call `plato_tick()` (or send the `tick` command).
+The `-a N` flag on `plato_engine` sets auto-tick every N milliseconds.
+The TCP server (`plato_server`) auto-ticks every `TICK_INTERVAL` ms (default 2000).
 | `PLATO_NAME_LEN` | 32 | Max name length |
 | `PLATO_CMD_BUF` | 512 | Command buffer size |
 | `PLATO_RESP_BUF` | 1024 | Response buffer size |
@@ -297,15 +312,25 @@ No heap allocation. Everything is static.
 
 ---
 
-## SuperInstance Ecosystem
+## PLATO Engine Block Family
 
-The Plato Engine Block is the C reference implementation in the SuperInstance
-monitoring and automation ecosystem:
+This is the C reference implementation of the Plato Engine Block. The complete family:
 
-- **plato-engine-block-c** (this repo) — C reference, bare-metal ready
-- **plato-engine-block** — TypeScript/Node.js implementation for servers
-- **plato-protocol** — Wire protocol specification and validators
-- **SuperInstance** — Orchestration layer for managing multiple engine blocks
+| Implementation | Language | Repo | Focus |
+|---|---|---|---|
+| **C Reference** ← you are here | C99 | [plato-engine-block-c](https://github.com/SuperInstance/plato-engine-block-c) | Embedded, bare-metal, zero heap alloc |
+| **Rust (Original)** | Rust | [plato-engine-block](https://github.com/SuperInstance/plato-engine-block) | `no_std` + alloc, builder pattern, tokio server |
+| **Elixir/OTP** | Elixir | [plato-engine-block-elixir](https://github.com/SuperInstance/plato-engine-block-elixir) | BEAM supervision trees, fault tolerance, hot reload |
+| **Zig** | Zig | [plato-engine-block-zig](https://github.com/SuperInstance/plato-engine-block-zig) | Comptime ternary packing, cross-compile, zero hidden control flow |
+| **Python Core** | Python | [plato-core](https://github.com/SuperInstance/plato-core) | Foundation types, mesh registry, training tiles |
+| **Runtime Kernel** | Rust | [plato-runtime-kernel](https://github.com/SuperInstance/plato-runtime-kernel) | Spatial model: tensor grid, batons, assertion traps |
+| **Server** | Python | [plato-server](https://github.com/SuperInstance/plato-server) | Knowledge tiles, fleet sync via Matrix, HTTP API |
+
+**Specs & Guides:**
+- 📜 [PLATO Wire Protocol](https://github.com/SuperInstance/AI-Writings/blob/main/PLATO_WIRE_PROTOCOL.md)
+- 📖 [PLATO Master Guide](https://github.com/SuperInstance/AI-Writings/blob/main/PLATO_MASTER_GUIDE.md)
+- 🗺️ [PLATO Ecosystem Map](https://github.com/SuperInstance/AI-Writings/blob/main/PLATO_ECOSYSTEM_MAP.md)
+- 🏗️ [PLATO Engine Block Architecture](https://github.com/SuperInstance/AI-Writings/blob/main/PLATO_ENGINE_BLOCK_ARCHITECTURE.md)
 
 The C implementation proves the concept runs with minimal resources while
 maintaining the full protocol surface. Port it to any platform, connect it
