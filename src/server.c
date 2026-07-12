@@ -51,6 +51,7 @@ static int set_nonblock(int fd) {
 
 static void broadcast(plato_engine_t *eng, client_t *clients, int nclients,
                       const char *msg, int msglen) {
+    (void)eng;
     for (int i = 0; i < nclients; i++) {
         if (clients[i].fd >= 0 && clients[i].subscribed) {
             send(clients[i].fd, msg, msglen, MSG_NOSIGNAL);
