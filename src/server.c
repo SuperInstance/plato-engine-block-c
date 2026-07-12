@@ -61,9 +61,9 @@ static void broadcast(plato_engine_t *eng, client_t *clients, int nclients,
 }
 
 int main(int argc, char **argv) {
-    int port = 7070;
+    int port = 1234;
     if (argc >= 2) port = atoi(argv[1]);
-    if (port <= 0) port = 7070;
+    if (port <= 0) port = 1234;
 
     signal(SIGINT,  on_signal);
     signal(SIGTERM, on_signal);
@@ -143,7 +143,7 @@ int main(int argc, char **argv) {
             int cfd = accept(lfd, NULL, NULL);
             if (cfd >= 0) {
                 set_nonblock(cfd);
-                const char *welcome = "Plato Engine Block — type 'help' for commands\n";
+                const char *welcome = "{\"type\":\"welcome\",\"room_id\":\"engine_room\",\"tick_hz\":0.2,\"sensors\":[\"coolant_temp_c\",\"bilge_cm\",\"rpm\"]}\n";
                 send(cfd, welcome, strlen(welcome), MSG_NOSIGNAL);
                 /* find slot */
                 int slot = -1;
@@ -210,11 +210,11 @@ int main(int argc, char **argv) {
                 /* handle subscribe/unsubscribe locally */
                 if (strcmp(line, "subscribe") == 0) {
                     clients[i].subscribed = true;
-                    const char *ok = "ok subscribed\n";
+                    const char *ok = "{\"type\":\"subscribed\",\"tick_hz\":0.2}\n";
                     send(clients[i].fd, ok, strlen(ok), MSG_NOSIGNAL);
                 } else if (strcmp(line, "unsubscribe") == 0) {
                     clients[i].subscribed = false;
-                    const char *ok = "ok unsubscribed\n";
+                    const char *ok = "{\"type\":\"unsubscribed\"}\n";
                     send(clients[i].fd, ok, strlen(ok), MSG_NOSIGNAL);
                 } else {
                     int n = plato_handle_command(&eng, line, resp, sizeof(resp));
