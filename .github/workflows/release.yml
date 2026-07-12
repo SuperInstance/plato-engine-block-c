@@ -1,0 +1,32 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+      - name: Build all targets
+        run: |
+          make all
+          make test
+          make examples
+      - name: Create release archive
+        run: |
+          tar czf plato-engine-block-c-${GITHUB_REF_NAME:-dev}.tar.gz \
+            include/ src/ tests/ examples/ Makefile README.md LICENSE \
+            PLATO_PROTOCOL.md TUTORIAL.md DEVELOPER_GUIDE.md PLUG_AND_PLAY.md
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: plato-engine-block-c-*.tar.gz
+          generate_release_notes: true
