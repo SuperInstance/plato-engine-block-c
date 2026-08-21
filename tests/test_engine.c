@@ -200,7 +200,10 @@ int main(void) {
         plato_handle_command(&eng, "fan 75.5", resp, sizeof(resp));
         assert(g_actuator_calls == 1);
         assert(g_actuator_last_val == 75.5);
-        assert(strcmp(resp, "ok fan=75.50") == 0);
+        /* JSON response: {"type":"ack","command":"actuator","name":"fan","value":75.5000} */
+        assert(strstr(resp, "\"type\":\"ack\"") != NULL);
+        assert(strstr(resp, "\"name\":\"fan\"") != NULL);
+        assert(strstr(resp, "75.5000") != NULL);
     }
     PASS();
 

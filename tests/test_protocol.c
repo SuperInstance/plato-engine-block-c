@@ -33,10 +33,10 @@ int main(void) {
     /* ---- tick command ---- */
     TEST("tick command returns sensor readings");
     {
-        int n = plato_handle_command(&eng, "tick", resp, sizeof(resp));
-        assert(n > 0);
-        assert(strncmp(resp, "tick ", 5) == 0);
-        assert(strstr(resp, "temp=42.00") != NULL);
+        plato_handle_command(&eng, "tick", resp, sizeof(resp));
+        /* JSON: {"type":"tick","t":...,"seq":...,"data":{"temp":42.0000}} */
+        assert(strstr(resp, "\"type\":\"tick\"") != NULL);
+        assert(strstr(resp, "\"temp\":42.0000") != NULL);
     }
     PASS();
 
@@ -53,70 +53,68 @@ int main(void) {
     {
         plato_handle_command(&eng, "tick", resp, sizeof(resp));
         plato_handle_command(&eng, "tick", resp, sizeof(resp));
-        int n = plato_handle_command(&eng, "history 5", resp, sizeof(resp));
-        assert(n > 0);
-        assert(strncmp(resp, "history", 7) == 0);
-        assert(strstr(resp, "temp:") != NULL);
+        plato_handle_command(&eng, "history 5", resp, sizeof(resp));
+        assert(strstr(resp, "\"type\":\"history\"") != NULL);
+        assert(strstr(resp, "\"temp\":") != NULL);
     }
     PASS();
 
-    TEST("history default shows 10 entries");
+    TEST("history default shows entries");
     {
-        int n = plato_handle_command(&eng, "history", resp, sizeof(resp));
-        assert(n > 0);
-        assert(strncmp(resp, "history (10)", 12) == 0);
+        plato_handle_command(&eng, "history", resp, sizeof(resp));
+        assert(strstr(resp, "\"type\":\"history\"") != NULL);
     }
     PASS();
 
     /* ---- actuator command ---- */
     TEST("unknown actuator returns error");
     {
-        int n = plato_handle_command(&eng, "nonexistent 5.0", resp, sizeof(resp));
-        assert(strncmp(resp, "err", 3) == 0);
+        plato_handle_command(&eng, "nonexistent 5.0", resp, sizeof(resp));
+        assert(strstr(resp, "\"type\":\"error\"") != NULL);
     }
     PASS();
 
-    TEST("actuator set returns ok");
+    TEST("actuator set returns ack");
     {
         plato_add_actuator(&eng, "fan", NULL, NULL);
-        int n = plato_handle_command(&eng, "fan 75.0", resp, sizeof(resp));
-        assert(strncmp(resp, "ok fan=75.00", 12) == 0);
+        plato_handle_command(&eng, "fan 75.0", resp, sizeof(resp));
+        assert(strstr(resp, "\"type\":\"ack\"") != NULL);
+        assert(strstr(resp, "\"name\":\"fan\"") != NULL);
+        assert(strstr(resp, "75.0000") != NULL);
     }
     PASS();
 
     /* ---- alarm list ---- */
     TEST("alarm list shows alarms");
     {
-        int n = plato_handle_command(&eng, "alarm list", resp, sizeof(resp));
-        assert(n > 0);
-        assert(strncmp(resp, "alarms", 6) == 0);
+        plato_handle_command(&eng, "alarm list", resp, sizeof(resp));
+        assert(strstr(resp, "\"type\":\"alarm_list\"") != NULL);
     }
     PASS();
 
     /* ---- subscribe/unsubscribe ---- */
     TEST("subscribe command returns ok");
     {
-        int n = plato_handle_command(&eng, "subscribe", resp, sizeof(resp));
-        assert(strcmp(resp, "ok subscribed") == 0);
+        plato_handle_command(&eng, "subscribe", resp, sizeof(resp));
+        assert(strstr(resp, "\"type\":\"subscribed\"") != NULL);
     }
     PASS();
 
     TEST("unsubscribe command returns ok");
     {
-        int n = plato_handle_command(&eng, "unsubscribe", resp, sizeof(resp));
-        assert(strcmp(resp, "ok unsubscribed") == 0);
+        plato_handle_command(&eng, "unsubscribe", resp, sizeof(resp));
+        assert(strstr(resp, "\"type\":\"unsubscribed\"") != NULL);
     }
     PASS();
 
     /* ---- help ---- */
     TEST("help command lists all commands");
     {
-        int n = plato_handle_command(&eng, "help", resp, sizeof(resp));
-        assert(n > 0);
+        plato_handle_command(&eng, "help", resp, sizeof(resp));
+        assert(strstr(resp, "\"type\":\"help\"") != NULL);
         assert(strstr(resp, "tick") != NULL);
         assert(strstr(resp, "history") != NULL);
         assert(strstr(resp, "help") != NULL);
-        assert(strstr(resp, "quit") != NULL);
         assert(strstr(resp, "subscribe") != NULL);
         assert(strstr(resp, "alarm list") != NULL);
     }
@@ -125,31 +123,31 @@ int main(void) {
     /* ---- quit ---- */
     TEST("quit command returns bye");
     {
-        int n = plato_handle_command(&eng, "quit", resp, sizeof(resp));
-        assert(strcmp(resp, "bye") == 0);
+        plato_handle_command(&eng, "quit", resp, sizeof(resp));
+        assert(strstr(resp, "\"type\":\"bye\"") != NULL);
     }
     PASS();
 
     /* ---- unknown command ---- */
     TEST("unknown command returns error");
     {
-        int n = plato_handle_command(&eng, "foobar", resp, sizeof(resp));
-        assert(strncmp(resp, "err", 3) == 0);
+        plato_handle_command(&eng, "foobar", resp, sizeof(resp));
+        assert(strstr(resp, "\"type\":\"error\"") != NULL);
     }
     PASS();
 
     /* ---- whitespace handling ---- */
     TEST("leading whitespace is trimmed");
     {
-        int n = plato_handle_command(&eng, "   tick", resp, sizeof(resp));
-        assert(strncmp(resp, "tick ", 5) == 0);
+        plato_handle_command(&eng, "   tick", resp, sizeof(resp));
+        assert(strstr(resp, "\"type\":\"tick\"") != NULL);
     }
     PASS();
 
     TEST("trailing whitespace handled");
     {
-        int n = plato_handle_command(&eng, "tick  ", resp, sizeof(resp));
-        assert(strncmp(resp, "tick ", 5) == 0);
+        plato_handle_command(&eng, "tick  ", resp, sizeof(resp));
+        assert(strstr(resp, "\"type\":\"tick\"") != NULL);
     }
     PASS();
 

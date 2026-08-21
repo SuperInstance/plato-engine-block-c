@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
 
 /* ------------------------------------------------------------------ */
 /*  Tuneable constants (override before #include if you like)         */
@@ -607,9 +608,55 @@ static void rtrim(char *s) {
     }
 }
 
+/* ---- JSON response helpers ---- */
+
+static int json_tick_response(plato_engine_t *eng, char *resp, size_t resp_len) {
+    int n = 0;
+    n += snprintf(resp + n, resp_len - n,
+        "{\"type\":\"tick\",\"t\":%.3f,\"seq\":%llu,\"data\":{",
+        (double)time(NULL), (unsigned long long)eng->tick_num);
+    for (int i = 0; i < eng->sensor_count; i++) {
+        if (i > 0) n += snprintf(resp + n, resp_len - n, ",");
+        n += snprintf(resp + n, resp_len - n, "\"%s\":%.4f",
+                      eng->sensors[i].name, eng->last_tick[i]);
+    }
+    n += snprintf(resp + n, resp_len - n, "}}");
+    return n;
+}
+
+static int json_history_response(plato_engine_t *eng, int count, char *resp, size_t resp_len) {
+    int n = 0;
+    int avail = 0;
+    for (int s = 0; s < eng->sensor_count; s++) {
+        if (eng->history[s].count > avail) avail = eng->history[s].count;
+    }
+    int show = count < avail ? count : avail;
+    if (show < 0) show = 0;
+
+    n += snprintf(resp + n, resp_len - n,
+        "{\"type\":\"history\",\"count\":%d,\"ticks\":[", show);
+
+    int first = 1;
+    for (int j = show - 1; j >= 0; j--) {
+        if (!first) n += snprintf(resp + n, resp_len - n, ",");
+        first = 0;
+        unsigned long long seq = eng->tick_num - j;
+        n += snprintf(resp + n, resp_len - n,
+            "{\"t\":0.0,\"seq\":%llu,\"data\":{", seq);
+        for (int s = 0; s < eng->sensor_count; s++) {
+            if (s > 0) n += snprintf(resp + n, resp_len - n, ",");
+            n += snprintf(resp + n, resp_len - n, "\"%s\":%.4f",
+                          eng->sensors[s].name,
+                          history_get(&eng->history[s], j));
+        }
+        n += snprintf(resp + n, resp_len - n, "}}");
+    }
+    n += snprintf(resp + n, resp_len - n, "]}");
+    return n;
+}
+
 int plato_handle_command(plato_engine_t *eng, const char *cmd,
                          char *resp, size_t resp_len) {
-    /* work on a trimmed copy */
     char cmdbuf[PLATO_CMD_BUF];
     strncpy(cmdbuf, cmd, sizeof(cmdbuf) - 1);
     cmdbuf[sizeof(cmdbuf) - 1] = '\0';
@@ -619,182 +666,122 @@ int plato_handle_command(plato_engine_t *eng, const char *cmd,
     /* ---- tick ---- */
     if (strcmp(c, "tick") == 0) {
         plato_tick(eng);
-        int n = 0;
-        n += snprintf(resp + n, resp_len - n, "tick %llu:",
-                      (unsigned long long)eng->tick_num);
-        for (int i = 0; i < eng->sensor_count; i++) {
-            n += snprintf(resp + n, resp_len - n, " %s=%.2f",
-                          eng->sensors[i].name, eng->last_tick[i]);
-        }
-        /* fire alarms */
-        for (int i = 0; i < eng->alarm_count; i++) {
-            if (eng->alarms[i].firing) {
-                const char *mode_str = (eng->alarms[i].mode == PLATO_ALARM_SYMMETRY)
-                                        ? " SYMM" : "";
-                n += snprintf(resp + n, resp_len - n,
-                              "\n! ALARM %s [%s%s] %s %.2f",
-                              eng->alarms[i].name,
-                              severity_str(eng->alarms[i].severity),
-                              mode_str,
-                              cmp_str(eng->alarms[i].cmp),
-                              eng->alarms[i].threshold);
-            }
-        }
-        /* report veto */
-        if (eng->veto_active) {
-            n += snprintf(resp + n, resp_len - n,
-                          "\n⛔ VETO ACTIVE — overridden by '%s'",
-                          eng->veto_source_name);
-        }
-        /* report symmetry state if any pairs are defined */
-        for (int i = 0; i < eng->symmetry_pair_count; i++) {
-            plato_symmetry_pair_t *p = &eng->symmetry_pairs[i];
-            n += snprintf(resp + n, resp_len - n,
-                          "\n  sym '%s': r=%.2f %s",
-                          p->name, p->last_correlation,
-                          p->symmetric ? "✓" : "✗");
-        }
-        return n;
+        return json_tick_response(eng, resp, resp_len);
     }
 
     /* ---- history [N] ---- */
     if (strncmp(c, "history", 7) == 0 &&
-        (cmd[7] == '\0' || cmd[7] == ' ' || cmd[7] == '\n')) {
-        int n = 0;
+        (c[7] == '\0' || c[7] == ' ' || c[7] == '\n')) {
         const char *arg = trim(c + 7);
-        int count = 10; /* default */
+        int count = 10;
         if (*arg) count = atoi(arg);
         if (count <= 0) count = 10;
-
-        n += snprintf(resp + n, resp_len - n, "history (%d):\n", count);
-        for (int s = 0; s < eng->sensor_count; s++) {
-            int avail = eng->history[s].count;
-            int show  = count < avail ? count : avail;
-            n += snprintf(resp + n, resp_len - n, "  %s:", eng->sensors[s].name);
-            for (int j = 0; j < show; j++) {
-                n += snprintf(resp + n, resp_len - n, " %.2f",
-                              history_get(&eng->history[s], j));
-            }
-            n += snprintf(resp + n, resp_len - n, "\n");
-        }
-        return n;
-    }
-
-    /* ---- alarm list ---- */
-    if (strcmp(c, "alarm list") == 0) {
-        int n = 0;
-        n += snprintf(resp + n, resp_len - n, "alarms (%d):\n", eng->alarm_count);
-        for (int i = 0; i < eng->alarm_count; i++) {
-            plato_alarm_t *a = &eng->alarms[i];
-            if (a->mode == PLATO_ALARM_SYMMETRY) {
-                n += snprintf(resp + n, resp_len - n,
-                              "  [%d] %s  SYMM  sensors=%s/%s  thresh=%.2f  sev=%s  armed=%s\n",
-                              i, a->name,
-                              eng->sensors[a->sensor_idx].name,
-                              eng->sensors[a->sensor_idx2].name,
-                              a->threshold,
-                              severity_str(a->severity),
-                              a->armed ? "yes" : "no");
-            } else {
-                n += snprintf(resp + n, resp_len - n,
-                              "  [%d] %s  sensor=%s  %s %.2f  sev=%s  armed=%s\n",
-                              i, a->name, eng->sensors[a->sensor_idx].name,
-                              cmp_str(a->cmp), a->threshold,
-                              severity_str(a->severity),
-                              a->armed ? "yes" : "no");
-            }
-        }
-        return n;
-    }
-
-    /* ---- symmetry list ---- */
-    if (strcmp(c, "symmetry list") == 0) {
-        int n = 0;
-        n += snprintf(resp + n, resp_len - n, "symmetry pairs (%d):\n",
-                      eng->symmetry_pair_count);
-        for (int i = 0; i < eng->symmetry_pair_count; i++) {
-            plato_symmetry_pair_t *p = &eng->symmetry_pairs[i];
-            n += snprintf(resp + n, resp_len - n,
-                          "  [%d] %s  %s ↔ %s  r=%.2f  thresh=%.2f  %s\n",
-                          i, p->name,
-                          eng->sensors[p->sensor_a].name,
-                          eng->sensors[p->sensor_b].name,
-                          p->last_correlation,
-                          p->threshold,
-                          p->symmetric ? "✓" : "✗");
-        }
-        return n;
-    }
-
-    /* ---- veto status ---- */
-    if (strcmp(c, "veto") == 0) {
-        if (eng->veto_active) {
-            return snprintf(resp, resp_len,
-                            "⛔ VETO active — source: '%s' (alarm %d)",
-                            eng->veto_source_name, eng->veto_source_alarm);
-        }
-        return snprintf(resp, resp_len, "✅ No veto active");
-    }
-
-    /* ---- submit / unsubscribe (stub — real fd handled by server) ---- */
-    if (strcmp(c, "subscribe") == 0) {
-        snprintf(resp, resp_len, "ok subscribed");
-        return (int)strlen(resp);
-    }
-    if (strcmp(c, "unsubscribe") == 0) {
-        snprintf(resp, resp_len, "ok unsubscribed");
-        return (int)strlen(resp);
-    }
-
-    /* ---- help ---- */
-    if (strcmp(c, "help") == 0) {
-        return snprintf(resp, resp_len,
-            "Plato Engine Block — commands:\n"
-            "  tick            — read sensors, run one tick\n"
-            "  history [N]     — show last N readings (default 10)\n"
-            "  <actuator> <v>  — set actuator to value\n"
-            "  alarm list      — show all alarms\n"
-            "  symmetry list   — show all symmetry pairs\n"
-            "  veto            — show current veto state\n"
-            "  subscribe       — subscribe to tick broadcasts\n"
-            "  unsubscribe     — stop tick broadcasts\n"
-            "  help            — this message\n"
-            "  quit            — disconnect\n");
-    }
-
-    /* ---- quit ---- */
-    if (strcmp(c, "quit") == 0) {
-        snprintf(resp, resp_len, "bye");
-        return (int)strlen(resp);
+        return json_history_response(eng, count, resp, resp_len);
     }
 
     /* ---- actuator <name> <value> ---- */
-    {
+    if (strncmp(c, "actuator ", 9) == 0) {
+        const char *rest = c + 9;
         char aname[PLATO_NAME_LEN] = {0};
         double aval = 0.0;
-        if (sscanf(c, "%31s %lf", aname, &aval) == 2) {
+        if (sscanf(rest, "%31s %lf", aname, &aval) == 2) {
             for (int i = 0; i < eng->actuator_count; i++) {
                 if (strcmp(eng->actuators[i].name, aname) == 0) {
-                    /* check veto: blocked if veto is active */
                     if (eng->veto_active) {
                         return snprintf(resp, resp_len,
-                                        "⛔ VETO BLOCKED — '%s' overridden by '%s'",
-                                        aname, eng->veto_source_name);
+                            "{\"type\":\"error\",\"message\":\"veto active: %s\"}",
+                            eng->veto_source_name);
                     }
                     if (eng->actuators[i].write) {
                         eng->actuators[i].write(aname, aval,
                                                  eng->actuators[i].user_data);
                     }
                     eng->actuators[i].value = aval;
-                    return snprintf(resp, resp_len, "ok %s=%.2f", aname, aval);
+                    return snprintf(resp, resp_len,
+                        "{\"type\":\"ack\",\"command\":\"actuator\",\"name\":\"%s\",\"value\":%.4f}",
+                        aname, aval);
                 }
             }
-            return snprintf(resp, resp_len, "err unknown actuator '%s'", aname);
+            return snprintf(resp, resp_len,
+                "{\"type\":\"error\",\"message\":\"actuator '%s' not found\"}", aname);
         }
     }
 
-    return snprintf(resp, resp_len, "err unknown command (try 'help')");
+    /* ---- alarm list ---- */
+    if (strcmp(c, "alarm list") == 0) {
+        int n = 0;
+        n += snprintf(resp + n, resp_len - n,
+            "{\"type\":\"alarm_list\",\"alarms\":[");
+        for (int i = 0; i < eng->alarm_count; i++) {
+            plato_alarm_t *a = &eng->alarms[i];
+            if (i > 0) n += snprintf(resp + n, resp_len - n, ",");
+            const char *state = a->armed ? "idle" : "active";
+            n += snprintf(resp + n, resp_len - n,
+                "{\"id\":\"%s\",\"condition\":\"%s %s %.2f\",\"cooldown_sec\":%d,\"last_triggered\":null,\"state\":\"%s\"}",
+                a->name,
+                eng->sensors[a->sensor_idx].name,
+                cmp_str(a->cmp), a->threshold,
+                a->cooldown * PLATO_ALARM_COOLDOWN,
+                state);
+        }
+        n += snprintf(resp + n, resp_len - n, "]}");
+        return n;
+    }
+
+    /* ---- subscribe ---- */
+    if (strcmp(c, "subscribe") == 0) {
+        return snprintf(resp, resp_len,
+            "{\"type\":\"subscribed\",\"tick_hz\":0.2}");
+    }
+
+    /* ---- unsubscribe ---- */
+    if (strcmp(c, "unsubscribe") == 0) {
+        return snprintf(resp, resp_len,
+            "{\"type\":\"unsubscribed\"}");
+    }
+
+    /* ---- help ---- */
+    if (strcmp(c, "help") == 0) {
+        return snprintf(resp, resp_len,
+            "{\"type\":\"help\",\"commands\":[\"tick\",\"history [N]\",\"actuator <name> <value>\",\"alarm list\",\"alarm set <id> <condition> <cooldown>\",\"subscribe\",\"unsubscribe\",\"help\",\"quit\"]}");
+    }
+
+    /* ---- quit ---- */
+    if (strcmp(c, "quit") == 0) {
+        return snprintf(resp, resp_len, "{\"type\":\"bye\"}");
+    }
+
+    /* ---- backward compat: bare actuator name ---- */
+    {
+        char aname[PLATO_NAME_LEN] = {0};
+        double aval = 0.0;
+        if (sscanf(c, "%31s %lf", aname, &aval) == 2) {
+            for (int i = 0; i < eng->actuator_count; i++) {
+                if (strcmp(eng->actuators[i].name, aname) == 0) {
+                    if (eng->veto_active) {
+                        return snprintf(resp, resp_len,
+                            "{\"type\":\"error\",\"message\":\"veto blocked by '%s'\"}",
+                            eng->veto_source_name);
+                    }
+                    if (eng->actuators[i].write) {
+                        eng->actuators[i].write(aname, aval,
+                                                 eng->actuators[i].user_data);
+                    }
+                    eng->actuators[i].value = aval;
+                    return snprintf(resp, resp_len,
+                        "{\"type\":\"ack\",\"command\":\"actuator\",\"name\":\"%s\",\"value\":%.4f}",
+                        aname, aval);
+                }
+            }
+            return snprintf(resp, resp_len,
+                "{\"type\":\"error\",\"message\":\"unknown command or actuator '%s'\"}", aname);
+        }
+    }
+
+    return snprintf(resp, resp_len,
+        "{\"type\":\"error\",\"message\":\"unknown command (try 'help')\"}");
 }
+
 
 #endif /* PLATO_ENGINE_IMPL */
 #endif /* PLATO_ENGINE_H */
